@@ -73,6 +73,64 @@ def visualize_slant(seg_file: str, lut_file: str = lut_addr):
     plt.show()
 
 
+def visualize_t1w_subjectid(subjectid: str):
+    sub, ses = subjectid.split("_")
+    t1_file = (
+        Path("/nfs2/harmonization/BIDS/WRAPnew/")
+        / sub
+        / ses
+        / "anat"
+        / f"{subjectid}_T1w.nii.gz"
+    )
+    img_obj = nib.load(t1_file)
+    data = img_obj.get_fdata()
+
+    vmin, vmax = np.percentile(data, [1, 99])
+
+    x_mid = data.shape[0] // 2
+    y_mid = data.shape[1] // 2
+    z_mid = data.shape[2] // 2
+
+    slice_sagittal = data[x_mid, :, :]
+    slice_coronal = data[:, y_mid, :]
+    slice_axial = data[:, :, z_mid]
+
+    _, axes = plt.subplots(1, 3, figsize=(15, 5))
+
+    axes[0].imshow(
+        np.rot90(slice_sagittal),
+        cmap="gray",
+        vmin=vmin,
+        vmax=vmax,
+        interpolation="nearest",
+    )
+    axes[0].set_title(f"Sagittal (X = {x_mid})")
+    axes[0].axis("off")
+
+    axes[1].imshow(
+        np.rot90(slice_coronal),
+        cmap="gray",
+        vmin=vmin,
+        vmax=vmax,
+        interpolation="nearest",
+    )
+    axes[1].set_title(f"Coronal  (Y = {y_mid})")
+    axes[1].axis("off")
+
+    axes[2].imshow(
+        np.rot90(slice_axial),
+        cmap="gray",
+        vmin=vmin,
+        vmax=vmax,
+        interpolation="nearest",
+    )
+    axes[2].set_title(f"Axial    (Z = {z_mid})")
+    axes[2].axis("off")
+
+    plt.tight_layout()
+    plt.show()
+
+
 def visualize_slant_subjectid(subjectid: str):
     sub, ses = subjectid.split("_")
     seg_file = (

@@ -11,7 +11,7 @@ from tqdm.auto import tqdm
 label_df = pd.read_csv(Path("labels/label_index.csv"), usecols=["IDX"])
 
 exclude_ids = set(label_df["IDX"].tail(2))
-# exclude_ids.add(0)
+exclude_ids.add(0)
 
 root_dir = "/nfs2/harmonization/BIDS/WRAPnew/derivatives/"
 pattern = "sub-*/ses-*/SLANT-TICVv1.2/post/FinalResult/*_T1w_seg.nii.gz"
@@ -34,7 +34,7 @@ for seg_path in tqdm(paths, desc="Computing Brain Volume", total=len(paths)):
 
 df = pd.DataFrame(rows).sort_values("subject")
 df["zscore"] = st.zscore(df["BrainVol_ml"])
-df.to_csv("stats_csv/brain_volume_summary.csv", index=False)
+df.to_csv("stats_csv/brain_volume.csv", index=False)
 
 print(df.head())
-print(f"\nCSV saved: brain_volume_summary.csv")
+print(f"\nCSV saved: brain_volume.csv")
