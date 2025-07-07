@@ -1,15 +1,16 @@
+# nohup python roi_volume.py > logs/out_roi_volumes.log 2>&1 &
+
 import nibabel as nib
 import numpy as np
 import pandas as pd
-
 from pathlib import Path
 from tqdm.auto import tqdm
 
 root_dir = "/nfs2/harmonization/BIDS/WRAPnew/derivatives/"
 pattern = "sub-*/ses-*/SLANT-TICVv1.2/post/FinalResult/*_T1w_seg.nii.gz"
 
-pairs = pd.read_csv("labels/slant_ai_pairs.csv", usecols=["RightID", "LeftID"])
-LABEL_LIST = sorted(set(pairs["RightID"]).union(pairs["LeftID"]))
+label_df = pd.read_csv("labels/label_index.csv", usecols=["IDX"])
+LABEL_LIST = sorted(label_df["IDX"].astype(int))
 
 paths = list(Path(root_dir).glob(pattern))
 vrows = []

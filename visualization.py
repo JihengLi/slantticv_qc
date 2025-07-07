@@ -7,13 +7,10 @@ from matplotlib.colors import ListedColormap, BoundaryNorm
 from pathlib import Path
 
 root_dir = "/nfs2/harmonization/BIDS/WRAPnew/derivatives/"
-pattern = "sub-*/ses-*/SLANT-TICVv1.2/post/FinalResult/*_T1w_seg.nii.gz"
-lut_file = "labels/slant_itksnap.label"
-ai_pairs = "labels/slant_ai_pairs.csv"
-label_index = "labels/slant_itksnap.csv"
+lut_addr = "labels/slant.label"
 
 
-def load_itksnap_lut(lut_path: str, make_bg_transparent: bool = True):
+def load_lut(lut_path: str, make_bg_transparent: bool = True):
     idx_list, rgba_list = [], []
     with open(lut_path, "r") as f:
         for line in f:
@@ -35,16 +32,16 @@ def load_itksnap_lut(lut_path: str, make_bg_transparent: bool = True):
     if make_bg_transparent and 0 <= max_idx:
         full_rgba[0] = (0, 0, 0, 0)
 
-    cmap = ListedColormap(full_rgba, name="itksnap_lut")
+    cmap = ListedColormap(full_rgba, name="slant_lut")
     bounds = np.arange(max_idx + 2) - 0.5
     norm = BoundaryNorm(boundaries=bounds, ncolors=cmap.N)
     return cmap, norm
 
 
-def visualize_slant(seg_file: str, lut_file: str):
+def visualize_slant(seg_file: str, lut_file: str = lut_addr):
     img_obj = nib.load(seg_file)
     data = img_obj.get_fdata()
-    cmap, norm = load_itksnap_lut(lut_file, False)
+    cmap, norm = load_lut(lut_file, False)
 
     x_mid = data.shape[0] // 2
     y_mid = data.shape[1] // 2
@@ -90,4 +87,4 @@ def visualize_slant_subjectid(subjectid: str):
     #     "SLANT-TICVv1.2/post/FinalResult/5000_fusion27_mv/finetune_out/seg_output/epoch_0034/seg_orig_final" /
     #     f"{subject}_T1w_seg.nii.gz"
     # )
-    visualize_slant(seg_file, lut_file)
+    visualize_slant(seg_file, lut_addr)
