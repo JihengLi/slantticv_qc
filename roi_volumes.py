@@ -3,13 +3,18 @@
 import nibabel as nib
 import numpy as np
 import pandas as pd
+import yaml
+
 from pathlib import Path
 from tqdm.auto import tqdm
 
-root_dir = "/nfs2/harmonization/BIDS/WRAPnew/derivatives/"
-pattern = "sub-*/ses-*/SLANT-TICVv1.2/post/FinalResult/*_T1w_seg.nii.gz"
+with open("config.yaml", "r") as f:
+    cfg = yaml.safe_load(f)
 
-label_df = pd.read_csv("labels/label_index.csv", usecols=["IDX"])
+root_dir = cfg["root_dir"]
+pattern = cfg["pattern"]
+
+label_df = pd.read_csv(cfg["label_index"], usecols=["IDX"])
 LABEL_LIST = sorted(label_df["IDX"].astype(int))
 
 paths = list(Path(root_dir).glob(pattern))
@@ -30,10 +35,10 @@ for seg_path in tqdm(paths, desc="Computing ROI volumes", total=len(paths)):
     vrows.append(vol_dict)
 
 vdf = pd.DataFrame(vrows).set_index("subject").sort_index()
-vdf.to_csv("stats_csv/roi_volumes.csv")
+vdf.to_csv(cfg["roi_volumes_csv"])
 
 zdf = vdf.apply(lambda col: (col - col.mean()) / col.std(), axis=0)
-zdf.to_csv("stats_csv/roi_volumes_zscore.csv")
+zdf.to_csv(cfg["roi_volumes_zscore_csv"])
 
 print(vdf.iloc[:5, :8])
 outliers = (zdf.abs() > 3).sum().sum()
