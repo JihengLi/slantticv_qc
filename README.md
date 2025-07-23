@@ -76,7 +76,7 @@ python slant‑ticv_qc.py \
 
 - `--roi-frac-thr`: Min fraction of subjects per ROI to include in ROI‑level report (default: 0.05).
 
-- `--max-roi-show`: Max number of ROIs to list per session in the report (default: 12).
+- `--max-roi-show`: Max number of ROIs to list per session in the report (default: 135).
 
 ## Outputs
 

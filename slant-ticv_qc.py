@@ -59,7 +59,7 @@ def parse_args():
     p.add_argument(
         "--max-roi-show",
         type=int,
-        default=12,
+        default=135,
         help="Max number of ROIs to list per session in the report",
     )
     return p.parse_args()
