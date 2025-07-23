@@ -62,7 +62,9 @@ python slant‑ticv_qc.py \
       ses-<label>/
         anat/…              # raw T1w images here
     derivatives/
-      SLANT-TICVv1.2…/…_T1w_seg.nii.gz
+      sub-<label>/
+        ses-<label>/
+          SLANT-TICVv1.2…/…_T1w_seg.nii.gz
   ```
 - `--out_dir`: **required.** Directory where all CSVs, reports, and figures will be written.
 
