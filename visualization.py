@@ -1,19 +1,26 @@
+"""
+Author: Jiheng Li
+Email: jiheng.li.1@vanderbilt.edu
+"""
+
 import nibabel as nib
 import numpy as np
-import yaml
+import warnings
 
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap, BoundaryNorm
 
 from pathlib import Path
 from collections.abc import Sequence
+from typing import List, Union
+from nibabel.orientations import (
+    io_orientation,
+    axcodes2ornt,
+    ornt_transform,
+    apply_orientation,
+)
 
-with open("config.yaml", "r") as f:
-    cfg = yaml.safe_load(f)
-
-root_dir = cfg["root_dir"]
-t1_root_dir = cfg["t1_root_dir"]
-lut_addr = cfg["lut_addr"]
+lut_addr = "labels/slant.label"
 
 
 def load_lut(lut_path: str, bg_transparent: bool = True):
@@ -58,27 +65,145 @@ def _normalize_slices(
     return tuple(idxs)
 
 
+def _keep_roi(arr: np.ndarray, roi: List) -> np.ndarray:
+    mask = np.isin(arr, roi)
+    out = np.where(mask, arr, 0)
+    return out
+
+
+def _pick_first_exist(paths: List[Path]) -> Path:
+    for p in paths:
+        if p.exists():
+            return p
+    raise FileNotFoundError(
+        "None of the following paths exist:\n" + "\n".join(map(str, paths))
+    )
+
+
+def _load_as_ras(path):
+    img = nib.load(path, mmap=True)
+    data = img.get_fdata(dtype=np.float32)
+    src = io_orientation(img.affine)
+    tgt = axcodes2ornt(("R", "A", "S"))
+    trf = ornt_transform(src, tgt)
+    return apply_orientation(data, trf)
+
+
 def visualize_slant(
     seg_file: str | Path,
     lut_file: str | Path,
     sagittal_slices: int | str | Sequence[int | str] = "mid",
     coronal_slices: int | str | Sequence[int | str] = "mid",
     axial_slices: int | str | Sequence[int | str] = "mid",
+    keep_roi_list: List | None = None,
+    auto_slice: bool = False,
     t1_file: str | Path | None = None,
     alpha_seg: float = 0.6,
     save_path: Path | None = None,
-) -> None:
-    seg_img = nib.load(seg_file, mmap=True)
-    seg_data = seg_img.dataobj
+    show_img: bool = True,
+) -> plt.Figure:
+    seg_data = _load_as_ras(seg_file)
     cmap, norm = load_lut(lut_file, bg_transparent=t1_file != None)
 
     if t1_file:
-        t1_data = nib.load(t1_file, mmap=True).dataobj
+        t1_data = _load_as_ras(t1_file)
         if t1_data.shape != seg_data.shape:
             raise ValueError("T1 shape ≠ seg shape")
     else:
         t1_data = None
         alpha_seg = 1.0
+
+    if auto_slice:
+        if keep_roi_list is None:
+            raise ValueError("auto_slice=True requires keep_roi_list to be provided")
+        if sagittal_slices != "mid" or coronal_slices != "mid" or axial_slices != "mid":
+            warnings.warn("auto_slice=True: provided slices ignored.", UserWarning)
+
+        def _best_slice_along_axis(axis):
+            """Return a dict {roi: best_idx} and a fallback idx (max area)."""
+            best_for_roi = {}
+            max_area_idx, max_area = -1, -1
+
+            for i in range(seg_data.shape[axis]):
+                if axis == 0:
+                    slc = seg_data[i, :, :]
+                elif axis == 1:
+                    slc = seg_data[:, i, :]
+                else:
+                    slc = seg_data[:, :, i]
+
+                roi_counts = {
+                    roi: np.count_nonzero(slc == roi) for roi in keep_roi_list
+                }
+                total = sum(roi_counts.values())
+
+                if total > max_area:
+                    max_area, max_area_idx = total, i
+
+                for roi, cnt in roi_counts.items():
+                    if cnt == 0:
+                        continue
+                    if roi not in best_for_roi or cnt > best_for_roi[roi][1]:
+                        best_for_roi[roi] = (i, cnt)
+
+            best_for_roi = {roi: idx_cnt[0] for roi, idx_cnt in best_for_roi.items()}
+            return best_for_roi, max_area_idx
+
+        best_x_roi, fallback_x = _best_slice_along_axis(axis=0)
+        best_y_roi, fallback_y = _best_slice_along_axis(axis=1)
+        best_z_roi, fallback_z = _best_slice_along_axis(axis=2)
+
+        def _pick(best_map, fallback):
+            if len(best_map) == len(keep_roi_list):
+                idx = max(
+                    best_map.values(),
+                    key=lambda i: (
+                        np.count_nonzero(
+                            np.isin(
+                                (
+                                    seg_data[i, :, :]
+                                    if best_map is best_x_roi
+                                    else (
+                                        seg_data[:, i, :]
+                                        if best_map is best_y_roi
+                                        else seg_data[:, :, i]
+                                    )
+                                ),
+                                keep_roi_list,
+                            )
+                        )
+                    ),
+                )
+            elif best_map:
+                counts = {
+                    idx: np.count_nonzero(
+                        np.isin(
+                            (
+                                seg_data[idx, :, :]
+                                if best_map is best_x_roi
+                                else (
+                                    seg_data[:, idx, :]
+                                    if best_map is best_y_roi
+                                    else seg_data[:, :, idx]
+                                )
+                            ),
+                            keep_roi_list,
+                        )
+                    )
+                    for idx in best_map.values()
+                }
+                idx = max(counts, key=counts.get)
+            else:
+                idx = fallback
+            return int(idx)
+
+        best_x = _pick(best_x_roi, fallback_x)
+        best_y = _pick(best_y_roi, fallback_y)
+        best_z = _pick(best_z_roi, fallback_z)
+
+        sagittal_slices = [best_x]
+        coronal_slices = [best_y]
+        axial_slices = [best_z]
 
     x_idxs = _normalize_slices(sagittal_slices, seg_data.shape[0])
     y_idxs = _normalize_slices(coronal_slices, seg_data.shape[1])
@@ -95,6 +220,8 @@ def visualize_slant(
             np.rot90(seg_data[:, y, :]),
             np.rot90(seg_data[:, :, z]),
         )
+        if keep_roi_list:
+            slices_seg = tuple(_keep_roi(slc, keep_roi_list) for slc in slices_seg)
         if t1_data is not None:
             slices_t1 = (
                 np.rot90(t1_data[x, :, :]),
@@ -119,76 +246,92 @@ def visualize_slant(
     plt.tight_layout()
     if save_path:
         fig.savefig(save_path, dpi=300, bbox_inches="tight")
-        plt.close(fig)
-    else:
+    if show_img:
         plt.show()
+    else:
+        plt.close(fig)
+    return fig
 
 
 def visualize_slant_subjectid(
     subjectid: str,
+    root: str | Path,
+    lut_file: str | Path = lut_addr,
+    run_number: int = 1,
     sagittal_slices: int | str | Sequence[int | str] = "mid",
     coronal_slices: int | str | Sequence[int | str] = "mid",
     axial_slices: int | str | Sequence[int | str] = "mid",
+    keep_roi_list: List | None = None,
+    auto_slice: bool = False,
     bg_t1_file: bool = False,
     alpha_seg: float = 0.6,
     save_path: Path | None = None,
-):
+    show_img: bool = True,
+) -> plt.Figure:
     sub, ses = subjectid.split("_")
-    seg_file = (
-        Path(root_dir)
-        / sub
-        / ses
+    base_seg_dir = Path(root) / sub / ses
+    seg_candidates = [
+        base_seg_dir
+        / f"SLANT-TICVv1.2run-{run_number}/post/FinalResult"
+        / f"{subjectid}_run-{run_number}_T1w_seg.nii.gz",
+        base_seg_dir
         / "SLANT-TICVv1.2/post/FinalResult"
-        / f"{subjectid}_T1w_seg.nii.gz"
-    )
+        / f"{subjectid}_T1w_seg.nii.gz",
+    ]
+    seg_file = _pick_first_exist(seg_candidates)
     t1_file = None
     if bg_t1_file:
-        t1_file = Path(t1_root_dir) / sub / ses / "anat" / f"{subjectid}_T1w.nii.gz"
-    visualize_slant(
+        base_t1_dir = Path(root).parent / sub / ses / "anat"
+        t1_candidates = [
+            base_t1_dir / f"{subjectid}_run-{run_number}_T1w.nii.gz",
+            base_t1_dir / f"{subjectid}_T1w.nii.gz",
+        ]
+        t1_file = _pick_first_exist(t1_candidates)
+    return visualize_slant(
         seg_file,
-        lut_addr,
+        lut_file,
         sagittal_slices,
         coronal_slices,
         axial_slices,
+        keep_roi_list,
+        auto_slice,
         t1_file,
         alpha_seg,
         save_path,
+        show_img,
     )
 
 
-def visualize_t1w_subjectid(
-    subjectid: str,
-    root: str | Path = t1_root_dir,
+def visualize_t1w(
+    t1_file: str | Path,
     sagittal_slices: int | str | Sequence[int | str] = "mid",
     coronal_slices: int | str | Sequence[int | str] = "mid",
     axial_slices: int | str | Sequence[int | str] = "mid",
     perc: tuple[float, float] = (1, 99),
     save_path: Path | None = None,
-) -> None:
-    root = Path(root)
-    sub, ses = subjectid.split("_")
-    t1_file = root / sub / ses / "anat" / f"{subjectid}_T1w.nii.gz"
+    show_img: bool = True,
+) -> plt.Figure:
+    t1_file = Path(t1_file)
     if not t1_file.exists():
         raise FileNotFoundError(t1_file)
 
-    img = nib.load(t1_file, mmap=True)
-    dataobj = img.dataobj
+    data_ras = _load_as_ras(t1_file)
 
-    x_idxs = _normalize_slices(sagittal_slices, dataobj.shape[0])
-    y_idxs = _normalize_slices(coronal_slices, dataobj.shape[1])
-    z_idxs = _normalize_slices(axial_slices, dataobj.shape[2])
+    x_idxs = _normalize_slices(sagittal_slices, data_ras.shape[0])
+    y_idxs = _normalize_slices(coronal_slices, data_ras.shape[1])
+    z_idxs = _normalize_slices(axial_slices, data_ras.shape[2])
 
     combos = [(x, y, z) for x in x_idxs for y in y_idxs for z in z_idxs]
     n_rows = len(combos)
     fig, axes = plt.subplots(n_rows, 3, figsize=(15, 5 * n_rows))
     axes = np.asarray(axes).reshape(n_rows, 3)
-    vmin, vmax = np.percentile(dataobj, perc)
+    vmin, vmax = np.percentile(data_ras, perc)
 
     for row_idx, (x, y, z) in enumerate(combos):
         slices = (
-            np.rot90(dataobj[x, :, :]),
-            np.rot90(dataobj[:, y, :]),
-            np.rot90(dataobj[:, :, z]),
+            np.rot90(data_ras[x, :, :]),
+            np.rot90(data_ras[:, y, :]),
+            np.rot90(data_ras[:, :, z]),
         )
         titles = (
             f"Sagittal X={x}",
@@ -204,6 +347,99 @@ def visualize_t1w_subjectid(
     plt.tight_layout()
     if save_path:
         fig.savefig(save_path, dpi=300, bbox_inches="tight")
-        plt.close(fig)
-    else:
+    if show_img:
         plt.show()
+    else:
+        plt.close(fig)
+    return fig
+
+
+def visualize_t1w_subjectid(
+    subjectid: str,
+    root: str | Path,
+    run_number: int = 1,
+    sagittal_slices: int | str | Sequence[int | str] = "mid",
+    coronal_slices: int | str | Sequence[int | str] = "mid",
+    axial_slices: int | str | Sequence[int | str] = "mid",
+    perc: tuple[float, float] = (1, 99),
+    save_path: Path | None = None,
+    show_img: bool = True,
+) -> plt.Figure:
+    root = Path(root).parent
+    sub, ses = subjectid.split("_")
+    base_t1_dir = Path(root) / sub / ses / "anat"
+    t1_candidates = [
+        base_t1_dir / f"{subjectid}_run-{run_number}_T1w.nii.gz",
+        base_t1_dir / f"{subjectid}_T1w.nii.gz",
+    ]
+    t1_file = _pick_first_exist(t1_candidates)
+    return visualize_t1w(
+        t1_file,
+        sagittal_slices,
+        coronal_slices,
+        axial_slices,
+        perc,
+        save_path,
+        show_img,
+    )
+
+
+def visualize_ct(
+    ct_file: Union[str, Path],
+    sagittal_slices: Union[int, str, Sequence[Union[int, str]]] = "mid",
+    coronal_slices: Union[int, str, Sequence[Union[int, str]]] = "mid",
+    axial_slices: Union[int, str, Sequence[Union[int, str]]] = "mid",
+    window: tuple[int, int] = (-1024, 1024),
+    save_path: Union[str, Path] | None = None,
+    show_img: bool = True,
+) -> plt.Figure:
+    ct_file = Path(ct_file)
+    if not ct_file.exists():
+        raise FileNotFoundError(f"CT file not found: {ct_file}")
+
+    img = nib.load(ct_file)
+    img = nib.as_closest_canonical(img)
+    data_ras = _load_as_ras(ct_file)
+    sx, sy, sz = img.header.get_zooms()[:3]
+
+    x_idxs = _normalize_slices(sagittal_slices, data_ras.shape[0])
+    y_idxs = _normalize_slices(coronal_slices, data_ras.shape[1])
+    z_idxs = _normalize_slices(axial_slices, data_ras.shape[2])
+    combos = [(x, y, z) for x in x_idxs for y in y_idxs for z in z_idxs]
+    n = len(combos)
+
+    fig, axes = plt.subplots(n, 3, figsize=(15, 5 * n))
+    axes = np.asarray(axes).reshape(n, 3)
+    vmin, vmax = window
+
+    orient_titles = ("Sagittal", "Coronal", "Axial")
+    for i, (x, y, z) in enumerate(combos):
+        sl_sag = np.rot90(data_ras[x, :, :])
+        sl_cor = np.rot90(data_ras[:, y, :])
+        sl_axi = np.rot90(data_ras[:, :, z])
+        slices = (sl_sag, sl_cor, sl_axi)
+
+        for j, slc in enumerate(slices):
+            ax = axes[i, j]
+            ax.imshow(slc, cmap="bone", vmin=vmin, vmax=vmax, interpolation="nearest")
+            if j == 0:
+                aspect = sz / sy
+            elif j == 1:
+                aspect = sz / sx
+            else:
+                aspect = sy / sx
+
+            ax.set_aspect(aspect)
+            ax.set_title(
+                f"{orient_titles[j]} ({['X','Y','Z'][j]}={[x,y,z][j]})", fontsize=9
+            )
+            ax.axis("off")
+
+    fig.tight_layout()
+    if save_path:
+        fig.savefig(save_path, dpi=300, bbox_inches="tight")
+    if show_img:
+        plt.show()
+    else:
+        plt.close(fig)
+    return fig

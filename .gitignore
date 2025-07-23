@@ -3,6 +3,4 @@ __pycache__/
 *$py.class
 *.log
 .ipynb_checkpoints
-stats_csv/*
-stats_png/*
 logs/*
