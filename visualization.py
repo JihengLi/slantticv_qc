@@ -19,6 +19,7 @@ from nibabel.orientations import (
     ornt_transform,
     apply_orientation,
 )
+from bids_addr import *
 
 lut_addr = "labels/slant.label"
 
@@ -69,15 +70,6 @@ def _keep_roi(arr: np.ndarray, roi: List) -> np.ndarray:
     mask = np.isin(arr, roi)
     out = np.where(mask, arr, 0)
     return out
-
-
-def _pick_first_exist(paths: List[Path]) -> Path:
-    for p in paths:
-        if p.exists():
-            return p
-    raise FileNotFoundError(
-        "None of the following paths exist:\n" + "\n".join(map(str, paths))
-    )
 
 
 def _load_as_ras(path):
@@ -257,7 +249,6 @@ def visualize_slant_subjectid(
     subjectid: str,
     root: str | Path,
     lut_file: str | Path = lut_addr,
-    run_number: int = 1,
     sagittal_slices: int | str | Sequence[int | str] = "mid",
     coronal_slices: int | str | Sequence[int | str] = "mid",
     axial_slices: int | str | Sequence[int | str] = "mid",
@@ -268,25 +259,10 @@ def visualize_slant_subjectid(
     save_path: Path | None = None,
     show_img: bool = True,
 ) -> plt.Figure:
-    sub, ses = subjectid.split("_")
-    base_seg_dir = Path(root) / sub / ses
-    seg_candidates = [
-        base_seg_dir
-        / f"SLANT-TICVv1.2run-{run_number}/post/FinalResult"
-        / f"{subjectid}_run-{run_number}_T1w_seg.nii.gz",
-        base_seg_dir
-        / "SLANT-TICVv1.2/post/FinalResult"
-        / f"{subjectid}_T1w_seg.nii.gz",
-    ]
-    seg_file = _pick_first_exist(seg_candidates)
+    seg_file = find_slant_addr_subjectid(subjectid, Path(root))[0]
     t1_file = None
     if bg_t1_file:
-        base_t1_dir = Path(root).parent / sub / ses / "anat"
-        t1_candidates = [
-            base_t1_dir / f"{subjectid}_run-{run_number}_T1w.nii.gz",
-            base_t1_dir / f"{subjectid}_T1w.nii.gz",
-        ]
-        t1_file = _pick_first_exist(t1_candidates)
+        t1_file = find_t1w_addr_subjectid(subjectid, Path(root).parent)[0]
     return visualize_slant(
         seg_file,
         lut_file,
@@ -357,7 +333,6 @@ def visualize_t1w(
 def visualize_t1w_subjectid(
     subjectid: str,
     root: str | Path,
-    run_number: int = 1,
     sagittal_slices: int | str | Sequence[int | str] = "mid",
     coronal_slices: int | str | Sequence[int | str] = "mid",
     axial_slices: int | str | Sequence[int | str] = "mid",
@@ -365,14 +340,7 @@ def visualize_t1w_subjectid(
     save_path: Path | None = None,
     show_img: bool = True,
 ) -> plt.Figure:
-    root = Path(root).parent
-    sub, ses = subjectid.split("_")
-    base_t1_dir = Path(root) / sub / ses / "anat"
-    t1_candidates = [
-        base_t1_dir / f"{subjectid}_run-{run_number}_T1w.nii.gz",
-        base_t1_dir / f"{subjectid}_T1w.nii.gz",
-    ]
-    t1_file = _pick_first_exist(t1_candidates)
+    t1_file = find_t1w_addr_subjectid(subjectid, Path(root).parent)[0]
     return visualize_t1w(
         t1_file,
         sagittal_slices,

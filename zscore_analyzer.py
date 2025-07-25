@@ -100,38 +100,19 @@ class ZScoreAnalyzer:
         out_path = self.out_dir / "prob_images"
         out_path.mkdir(parents=True, exist_ok=True)
 
-        for sid in self.prob_subjectid:
-            m = re.match(r"^(sub-[^_]+_ses-[^_]+)(?:_run-(\d+))?$", sid)
-            if not m:
-                subjectid = sid
-                run_number = None
-            else:
-                subjectid = m.group(1)
-                run_number = m.group(2)
-
-            print(
-                f"\n=== Visualizing subject: {subjectid}"
-                + (f" (run {run_number})" if run_number else "")
-                + " ==="
-            )
-
+        for subjectid in self.prob_subjectid:
+            print(f"\n=== Visualizing subject: {subjectid} ===")
             viz_kwargs = {
                 "subjectid": subjectid,
                 "root": slant_root,
                 "bg_t1_file": True,
                 "show_img": False,
             }
-            if run_number:
-                viz_kwargs["run_number"] = run_number
-
             fig1 = visualize_slant_subjectid(**viz_kwargs)
-
             viz2_kwargs = {k: v for k, v in viz_kwargs.items() if k != "bg_t1_file"}
             fig2 = visualize_t1w_subjectid(**viz2_kwargs)
-
             arr1 = self._fig_to_array(fig1)
             arr2 = self._fig_to_array(fig2)
-
             combined_fig, (ax1, ax2) = plt.subplots(
                 2,
                 1,
@@ -145,13 +126,13 @@ class ZScoreAnalyzer:
             ax2.set_title("T1w Anatomy", fontsize=10)
             ax2.axis("off")
 
-            combined_file = out_path / f"{sid}.png"
+            combined_file = out_path / f"{subjectid}.png"
             combined_fig.savefig(combined_file, dpi=300, bbox_inches="tight")
             plt.close(combined_fig)
             plt.close(fig1)
             plt.close(fig2)
 
-            print(f"Saved combined image for {sid} at {combined_file}")
+            print(f"Saved combined image for {subjectid} at {combined_file}")
 
     @staticmethod
     def _fig_to_array(fig: plt.Figure) -> np.ndarray:

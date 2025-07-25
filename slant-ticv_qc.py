@@ -88,7 +88,6 @@ def main():
     calc = ROIVolumeCalculator(
         slant_ticv_root=args.slant_root,
         out_dir=args.out_dir,
-        pattern="sub-*/ses-*/SLANT-TICVv1.2*/post/FinalResult/*_T1w_seg.nii.gz",
         label_index=args.label_index,
     )
     calc.run()

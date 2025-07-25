@@ -15,11 +15,9 @@ class ROIVolumeCalculator:
         self,
         slant_ticv_root: str | Path,
         out_dir: str | Path,
-        pattern: str = "sub-*/ses-*/SLANT-TICVv1.2*/post/FinalResult/*_T1w_seg.nii.gz",
         label_index: str = "labels/label_index.csv",
     ):
         self.root_dir = Path(slant_ticv_root)
-        self.pattern = pattern
         self.label_index = Path(label_index)
         self.out_csv = Path(f"{out_dir}/stats_csv/roi_volumes.csv")
         self.out_z_csv = Path(f"{out_dir}/stats_csv/roi_volumes_zscore.csv")
@@ -27,7 +25,14 @@ class ROIVolumeCalculator:
         self.LABEL_LIST = sorted(label_df["IDX"].astype(int))
 
     def compute_volumes(self) -> pd.DataFrame:
-        paths = list(self.root_dir.glob(self.pattern))
+        patterns = [
+            "sub-*/ses-*/SLANT-TICVv1.2*/post/FinalResult/*_T1w_seg.nii.gz",
+            "sub-*/SLANT-TICVv1.2*/post/FinalResult/*_T1w_seg.nii.gz",
+        ]
+        paths = []
+        for pat in patterns:
+            paths.extend(self.root_dir.glob(pat))
+        paths = sorted(set(paths))
         vrows = []
         for seg_path in tqdm(paths, desc="Computing ROI volumes", total=len(paths)):
             sid = seg_path.name[: -len("_T1w_seg.nii.gz")]
