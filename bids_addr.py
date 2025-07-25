@@ -24,7 +24,7 @@ def _basename_no_ext(p: str) -> str:
     return NII_GZ_RE.sub("", name)
 
 
-def parse_entities(stem: PathLike) -> Dict[str, str]:
+def parse_entities(stem: Union[str, Path]) -> Dict[str, str]:
     s = _ensure_str(stem)
     s = _basename_no_ext(s)
     return {
