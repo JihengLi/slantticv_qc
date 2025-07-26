@@ -1,7 +1,11 @@
-from __future__ import annotations
+"""
+Author: Jiheng Li
+Email: jiheng.li.1@vanderbilt.edu
+"""
+
+import re
 
 from pathlib import Path
-import re
 from typing import Dict, List, Union
 
 VALID_ENTS = {"sub", "ses", "task", "acq", "ce", "rec", "run", "echo", "part", "chunk"}
@@ -34,10 +38,6 @@ def parse_entities(stem: Union[str, Path]) -> Dict[str, str]:
     }
 
 
-def _strip_suffix(subject_id: str) -> str:
-    return SUFFIX_RE.sub("", subject_id)
-
-
 def _build_slant_names(prefix: str, ents: Dict[str, str]) -> List[str]:
     bits = [f"{k}-{ents[k]}" for k in ORDERED_ENTS if k in ents]
     names = [prefix]
@@ -49,64 +49,69 @@ def _build_slant_names(prefix: str, ents: Dict[str, str]) -> List[str]:
 
 def find_t1w_addr_subjectid(
     subject_id: Union[str, Path], t1_root: Union[str, Path]
-) -> List[str]:
+) -> Path:
     t1_root = Path(t1_root)
     ents = parse_entities(subject_id)
-
     if "sub" not in ents:
         raise ValueError(f"No 'sub-' entity found in subject_id: {subject_id}")
 
     sub_dir = t1_root / f"sub-{ents['sub']}"
     ses_dir = sub_dir / f"ses-{ents['ses']}" if "ses" in ents else sub_dir
     anat_dir = ses_dir / "anat"
-
     if not anat_dir.exists():
-        return []
+        raise FileNotFoundError(f"anat dir not found: {anat_dir}")
 
-    base = _strip_suffix(_ensure_str(subject_id))
-    candidate_patterns = [f"{base}_T1w.nii.gz", "*_T1w.nii.gz"]
+    target_name = f"{_ensure_str(subject_id)}_T1w.nii.gz"
+    target_path = anat_dir / target_name
 
-    results: List[str] = []
-    for pat in candidate_patterns:
-        results.extend(str(p) for p in anat_dir.glob(pat))
+    if target_path.is_file():
+        return target_path
 
-    return sorted(set(results))
+    hits = list(anat_dir.glob("*_T1w.nii.gz"))
+    if not hits:
+        raise FileNotFoundError(
+            f"{target_name} not found for {subject_id} in {anat_dir}"
+        )
+    if len(hits) > 1:
+        raise RuntimeError(f"Multiple T1w files for {subject_id}: {hits}")
+
+    return hits[0]
 
 
 def find_slant_addr_subjectid(
     subject_id: Union[str, Path], slant_root: Union[str, Path]
-) -> List[str]:
+) -> Path:
     root = Path(slant_root)
     ents = parse_entities(subject_id)
-
     if "sub" not in ents:
         raise ValueError(f"No 'sub-' entity found in subject_id: {subject_id}")
 
     sub_dir = root / f"sub-{ents['sub']}"
     level_dir = sub_dir / f"ses-{ents['ses']}" if "ses" in ents else sub_dir
     if not level_dir.exists():
-        return []
+        raise FileNotFoundError(f"Level dir not found: {level_dir}")
 
     slant_prefix = "SLANT-TICVv1.2"
-    candidate_names = _build_slant_names(slant_prefix, ents)
-
-    slant_dirs = [level_dir / n for n in candidate_names if (level_dir / n).is_dir()]
+    cand_names = _build_slant_names(slant_prefix, ents)
+    slant_dirs = [level_dir / n for n in cand_names if (level_dir / n).is_dir()]
     if not slant_dirs:
         slant_dirs = list(level_dir.glob(f"{slant_prefix}*"))
+    if not slant_dirs:
+        raise FileNotFoundError(f"No SLANT dir under {level_dir}")
 
-    base = _strip_suffix(_ensure_str(subject_id))
-    target_name = f"{base}_T1w_seg.nii.gz"
+    target_name = f"{_ensure_str(subject_id)}_T1w_seg.nii.gz"
 
-    hits: List[str] = []
+    hits: list[Path] = []
     for sd in slant_dirs:
         fr = sd / "post" / "FinalResult"
-        if not fr.is_dir():
-            continue
+        if fr.is_dir():
+            p = fr / target_name
+            if p.is_file():
+                hits.append(p)
 
-        exact = list(fr.glob(target_name))
-        if exact:
-            hits.extend(str(p) for p in exact)
-        else:
-            hits.extend(str(p) for p in fr.glob("*_T1w_seg.nii.gz"))
+    if not hits:
+        raise FileNotFoundError(f"{target_name} not found for {subject_id}")
+    if len(hits) > 1:
+        raise RuntimeError(f"Multiple matches for {subject_id}: {hits}")
 
-    return sorted(set(hits))
+    return hits[0]

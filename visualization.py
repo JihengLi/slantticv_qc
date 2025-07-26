@@ -6,20 +6,23 @@ Email: jiheng.li.1@vanderbilt.edu
 import nibabel as nib
 import numpy as np
 import warnings
+import scipy.stats as st
 
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap, BoundaryNorm
+from matplotlib.gridspec import GridSpec
+from matplotlib.backends.backend_agg import FigureCanvasAgg
 
 from pathlib import Path
 from collections.abc import Sequence
-from typing import List, Union
+from typing import List, Optional, Union
 from nibabel.orientations import (
     io_orientation,
     axcodes2ornt,
     ornt_transform,
     apply_orientation,
 )
-from bids_addr import *
+from slantticv_qc.bids_path_finder import *
 
 lut_addr = "labels/slant.label"
 
@@ -53,7 +56,7 @@ def load_lut(lut_path: str, bg_transparent: bool = True):
 
 
 def _normalize_slices(
-    val: int | str | Sequence[int | str], size: int
+    val: Union[int, str, Sequence[Union[int, str]]], size: int
 ) -> tuple[int, ...]:
     if isinstance(val, (str, int)):
         val = (val,)
@@ -81,17 +84,31 @@ def _load_as_ras(path):
     return apply_orientation(data, trf)
 
 
+def _fig_to_array(fig, rgba: bool = False, close: bool = True) -> np.ndarray:
+    if fig.canvas is None or not isinstance(fig.canvas, FigureCanvasAgg):
+        FigureCanvasAgg(fig)
+    fig.canvas.draw()
+    w, h = fig.canvas.get_width_height()
+    if rgba:
+        buf = np.asarray(fig.canvas.buffer_rgba(), dtype=np.uint8).reshape(h, w, 4)
+    else:
+        buf = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8).reshape(h, w, 3)
+    if close:
+        plt.close(fig)
+    return buf
+
+
 def visualize_slant(
-    seg_file: str | Path,
-    lut_file: str | Path,
-    sagittal_slices: int | str | Sequence[int | str] = "mid",
-    coronal_slices: int | str | Sequence[int | str] = "mid",
-    axial_slices: int | str | Sequence[int | str] = "mid",
-    keep_roi_list: List | None = None,
+    seg_file: Union[str, Path],
+    lut_file: Union[str, Path],
+    sagittal_slices: Union[int, str, Sequence[Union[int, str]]] = "mid",
+    coronal_slices: Union[int, str, Sequence[Union[int, str]]] = "mid",
+    axial_slices: Union[int, str, Sequence[Union[int, str]]] = "mid",
+    keep_roi_list: Optional[List] = None,
     auto_slice: bool = False,
-    t1_file: str | Path | None = None,
+    t1_file: Optional[Union[str, Path]] = None,
     alpha_seg: float = 0.6,
-    save_path: Path | None = None,
+    save_path: Optional[Path] = None,
     show_img: bool = True,
 ) -> plt.Figure:
     seg_data = _load_as_ras(seg_file)
@@ -240,29 +257,28 @@ def visualize_slant(
         fig.savefig(save_path, dpi=300, bbox_inches="tight")
     if show_img:
         plt.show()
-    else:
-        plt.close(fig)
-    return fig
+    plt.close(fig)
+    return _fig_to_array(fig)
 
 
 def visualize_slant_subjectid(
     subjectid: str,
-    root: str | Path,
-    lut_file: str | Path = lut_addr,
-    sagittal_slices: int | str | Sequence[int | str] = "mid",
-    coronal_slices: int | str | Sequence[int | str] = "mid",
-    axial_slices: int | str | Sequence[int | str] = "mid",
-    keep_roi_list: List | None = None,
+    root: Union[str, Path],
+    lut_file: Union[str, Path] = lut_addr,
+    sagittal_slices: Union[int, str, Sequence[Union[int, str]]] = "mid",
+    coronal_slices: Union[int, str, Sequence[Union[int, str]]] = "mid",
+    axial_slices: Union[int, str, Sequence[Union[int, str]]] = "mid",
+    keep_roi_list: Optional[List] = None,
     auto_slice: bool = False,
     bg_t1_file: bool = False,
     alpha_seg: float = 0.6,
-    save_path: Path | None = None,
+    save_path: Optional[Path] = None,
     show_img: bool = True,
 ) -> plt.Figure:
-    seg_file = find_slant_addr_subjectid(subjectid, Path(root))[0]
+    seg_file = find_slant_addr_subjectid(subjectid, Path(root))
     t1_file = None
     if bg_t1_file:
-        t1_file = find_t1w_addr_subjectid(subjectid, Path(root).parent)[0]
+        t1_file = find_t1w_addr_subjectid(subjectid, Path(root).parent)
     return visualize_slant(
         seg_file,
         lut_file,
@@ -279,12 +295,12 @@ def visualize_slant_subjectid(
 
 
 def visualize_t1w(
-    t1_file: str | Path,
-    sagittal_slices: int | str | Sequence[int | str] = "mid",
-    coronal_slices: int | str | Sequence[int | str] = "mid",
-    axial_slices: int | str | Sequence[int | str] = "mid",
+    t1_file: Union[str, Path],
+    sagittal_slices: Union[int, str, Sequence[Union[int, str]]] = "mid",
+    coronal_slices: Union[int, str, Sequence[Union[int, str]]] = "mid",
+    axial_slices: Union[int, str, Sequence[Union[int, str]]] = "mid",
     perc: tuple[float, float] = (1, 99),
-    save_path: Path | None = None,
+    save_path: Optional[Path] = None,
     show_img: bool = True,
 ) -> plt.Figure:
     t1_file = Path(t1_file)
@@ -325,22 +341,21 @@ def visualize_t1w(
         fig.savefig(save_path, dpi=300, bbox_inches="tight")
     if show_img:
         plt.show()
-    else:
-        plt.close(fig)
-    return fig
+    plt.close(fig)
+    return _fig_to_array(fig)
 
 
 def visualize_t1w_subjectid(
     subjectid: str,
-    root: str | Path,
-    sagittal_slices: int | str | Sequence[int | str] = "mid",
-    coronal_slices: int | str | Sequence[int | str] = "mid",
-    axial_slices: int | str | Sequence[int | str] = "mid",
+    root: Union[str, Path],
+    sagittal_slices: Union[int, str, Sequence[Union[int, str]]] = "mid",
+    coronal_slices: Union[int, str, Sequence[Union[int, str]]] = "mid",
+    axial_slices: Union[int, str, Sequence[Union[int, str]]] = "mid",
     perc: tuple[float, float] = (1, 99),
-    save_path: Path | None = None,
+    save_path: Optional[Path] = None,
     show_img: bool = True,
 ) -> plt.Figure:
-    t1_file = find_t1w_addr_subjectid(subjectid, Path(root).parent)[0]
+    t1_file = find_t1w_addr_subjectid(subjectid, Path(root).parent)
     return visualize_t1w(
         t1_file,
         sagittal_slices,
@@ -411,3 +426,40 @@ def visualize_ct(
     else:
         plt.close(fig)
     return fig
+
+
+def plot_distribution(
+    series: np.ndarray, name: str, ylabel: str, png_name: str, out_dir: Union[str, Path]
+) -> None:
+    fig = plt.figure(constrained_layout=True, figsize=(15, 8))
+    gs = GridSpec(1, 2, figure=fig)
+
+    # Violin + box
+    ax1 = fig.add_subplot(gs[0, 0])
+    parts = ax1.violinplot(series, showmeans=False, showmedians=True, widths=0.6)
+    for pc in parts["bodies"]:
+        pc.set_alpha(0.6)
+    ax1.boxplot(series, widths=0.15, vert=True, showfliers=False, positions=[1])
+    ax1.set_ylabel(ylabel)
+    ax1.set_xticks([])
+    ax1.set_title(f"{name}: Violin + Box")
+
+    # Histogram + KDE
+    ax2 = fig.add_subplot(gs[0, 1])
+    ax2.hist(series, bins=30, alpha=0.6, density=True, label="Histogram")
+    kde_x = np.linspace(series.min(), series.max(), 200)
+    kde_y = st.gaussian_kde(series)(kde_x)
+    ax2.plot(kde_x, kde_y, linewidth=2, label="KDE")
+    ax2.axvline(series.mean(), linestyle="--", label="Mean")
+    ax2.set_xlabel(ylabel)
+    ax2.set_ylabel("Density")
+    ax2.set_title(f"{name}: Histogram + KDE")
+    ax2.legend()
+
+    fig.suptitle(f"{name} Distribution QC", fontsize=14)
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_png = out_dir / png_name
+    fig.savefig(out_png, dpi=300)
+    plt.close(fig)
+    print(f"Saved distribution plot to {out_png}")

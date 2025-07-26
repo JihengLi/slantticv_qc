@@ -59,11 +59,11 @@ python slant‑ticv_qc.py \
   ```
   Dataset/
     sub-<label>/
-      ses-<label>/
+      [ses-<label>]/
         anat/…              # raw T1w images here
     derivatives/
       sub-<label>/
-        ses-<label>/
+        [ses-<label>]/
           SLANT-TICVv1.2…/…_T1w_seg.nii.gz
   ```
 - `--out_dir`: **required.** Directory where all CSVs, reports, and figures will be written.
@@ -93,7 +93,8 @@ out_dir/
 │ ├─ brainvol_violin_hist.png # brain volume distribution plot
 │ └─ ticv_violin_hist.png # TICV distribution plot
 │
-├─ prob_images/ # segmentation overlays for outliers
+├─ prob_sessions/ # segmentation overlays for outlier sessions
+├─ prob_rois/ # volume distribution for outlier regions of interest
 └─ outliers.txt # three-level outlier report
 ```
 

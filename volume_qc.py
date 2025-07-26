@@ -4,17 +4,17 @@ Email: jiheng.li.1@vanderbilt.edu
 """
 
 import pandas as pd
-import numpy as np
 import scipy.stats as st
-import matplotlib.pyplot as plt
-from matplotlib.gridspec import GridSpec
+
+from typing import Union
 from pathlib import Path
+from visualization import plot_distribution
 
 
 class VolumeQC:
     def __init__(
         self,
-        out_dir: str | Path,
+        out_dir: Union[str, Path],
     ):
         self.out_dir = Path(out_dir)
         roi_volumes_csv = Path(out_dir) / "stats_csv" / "roi_volumes.csv"
@@ -47,58 +47,21 @@ class VolumeQC:
         self.brain_df.to_csv(brainvol_csv, index=False)
         print(f"Saved brain volumes to {brainvol_csv}")
 
-    def plot_distribution(
-        self, series: np.ndarray, name: str, ylabel: str, png_name: str
-    ):
-        fig = plt.figure(constrained_layout=True, figsize=(15, 8))
-        gs = GridSpec(1, 2, figure=fig)
-
-        # Violin + box
-        ax1 = fig.add_subplot(gs[0, 0])
-        parts = ax1.violinplot(series, showmeans=False, showmedians=True, widths=0.6)
-        for pc in parts["bodies"]:
-            pc.set_alpha(0.6)
-        ax1.boxplot(series, widths=0.15, vert=True, showfliers=False, positions=[1])
-        ax1.set_ylabel(ylabel)
-        ax1.set_xticks([])
-        ax1.set_title(f"{name}: Violin + Box")
-
-        # Histogram + KDE
-        ax2 = fig.add_subplot(gs[0, 1])
-        ax2.hist(series, bins=30, alpha=0.6, density=True, label="Histogram")
-        kde_x = np.linspace(series.min(), series.max(), 200)
-        kde_y = st.gaussian_kde(series)(kde_x)
-        ax2.plot(kde_x, kde_y, linewidth=2, label="KDE")
-        ax2.axvline(series.mean(), linestyle="--", label="Mean")
-        ax2.set_xlabel(ylabel)
-        ax2.set_ylabel("Density")
-        ax2.set_title(f"{name}: Histogram + KDE")
-        ax2.legend()
-
-        fig.suptitle(f"{name} Distribution QC", fontsize=14)
-        png_dir = self.out_dir / "stats_png"
-        png_dir.mkdir(parents=True, exist_ok=True)
-        out_png = png_dir / png_name
-        fig.savefig(out_png, dpi=300)
-        plt.close(fig)
-        print(f"Saved distribution plot to {out_png}")
-
     def run(self):
-        # compute metrics
         self.compute_brain()
         self.compute_ticv()
-        # save tables
         self.save_brainvol_csv()
-        # plot distributions
-        self.plot_distribution(
+        plot_distribution(
             self.brain_df["BrainVol_ml"].values,
             name="Brain Volume",
             ylabel="BrainVol (mL)",
-            png_name="brainvol_violin_hist.png",
+            png_name="BrainVol.png",
+            out_dir=self.out_dir / "stats_png",
         )
-        self.plot_distribution(
+        plot_distribution(
             self.ticv_df["TICV_ml"].values,
             name="TICV",
             ylabel="TICV (mL)",
-            png_name="ticv_violin_hist.png",
+            png_name="TICV.png",
+            out_dir=self.out_dir / "stats_png",
         )

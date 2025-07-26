@@ -6,6 +6,8 @@ Email: jiheng.li.1@vanderbilt.edu
 import nibabel as nib
 import numpy as np
 import pandas as pd
+
+from typing import Union
 from pathlib import Path
 from tqdm.auto import tqdm
 
@@ -13,8 +15,8 @@ from tqdm.auto import tqdm
 class ROIVolumeCalculator:
     def __init__(
         self,
-        slant_ticv_root: str | Path,
-        out_dir: str | Path,
+        slant_ticv_root: Union[str, Path],
+        out_dir: Union[str, Path],
         label_index: str = "labels/label_index.csv",
     ):
         self.root_dir = Path(slant_ticv_root)

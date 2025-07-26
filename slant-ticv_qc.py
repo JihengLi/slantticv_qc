@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Author: Jiheng Li
 Email: jiheng.li.1@vanderbilt.edu
@@ -94,7 +93,9 @@ def main():
 
     logging.info("---> Running z-score analysis …")
     analyzer = ZScoreAnalyzer(
+        slant_ticv_root=args.slant_root,
         out_dir=args.out_dir,
+        label_index=args.label_index,
         cell_thr=args.cell_thr,
         sub_thr=args.sub_thr,
         roi_frac_thr=args.roi_frac_thr,
@@ -103,7 +104,10 @@ def main():
     analyzer.run()
 
     logging.info("---> Visualizing flagged subjects …")
-    analyzer.visualize_subjects(args.slant_root)
+    analyzer.visualize_subjects()
+
+    logging.info("---> Plotting flagged regions of interest …")
+    analyzer.plot_roi_distribution()
 
     logging.info("---> Computing brain & TICV QC …")
     volqc = VolumeQC(
