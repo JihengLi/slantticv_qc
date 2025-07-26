@@ -22,7 +22,7 @@ from nibabel.orientations import (
     ornt_transform,
     apply_orientation,
 )
-from slantticv_qc.bids_path_finder import *
+from slantbids_path_finder import *
 
 lut_addr = "labels/slant.label"
 
