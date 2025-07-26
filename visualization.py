@@ -16,13 +16,7 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg
 from pathlib import Path
 from collections.abc import Sequence
 from typing import List, Optional, Union
-from nibabel.orientations import (
-    io_orientation,
-    axcodes2ornt,
-    ornt_transform,
-    apply_orientation,
-)
-from slantbids_path_finder import *
+from bids_path_finder import find_slant_addr_subjectid, find_t1w_addr_subjectid
 
 lut_addr = "labels/slant.label"
 
@@ -75,13 +69,12 @@ def _keep_roi(arr: np.ndarray, roi: List) -> np.ndarray:
     return out
 
 
-def _load_as_ras(path):
+def _load_as_ras(path, dtype=np.float32):
     img = nib.load(path, mmap=True)
-    data = img.get_fdata(dtype=np.float32)
-    src = io_orientation(img.affine)
-    tgt = axcodes2ornt(("R", "A", "S"))
-    trf = ornt_transform(src, tgt)
-    return apply_orientation(data, trf)
+    img_ras = nib.as_closest_canonical(img)
+    data = np.asarray(img_ras.dataobj, dtype=dtype)
+    zooms = img_ras.header.get_zooms()[:3]
+    return data, *zooms, img_ras.affine
 
 
 def _fig_to_array(fig, rgba: bool = False, close: bool = True) -> np.ndarray:
@@ -111,11 +104,11 @@ def visualize_slant(
     save_path: Optional[Path] = None,
     show_img: bool = True,
 ) -> plt.Figure:
-    seg_data = _load_as_ras(seg_file)
+    seg_data, seg_sx, seg_sy, seg_sz, _ = _load_as_ras(seg_file)
     cmap, norm = load_lut(lut_file, bg_transparent=t1_file != None)
 
     if t1_file:
-        t1_data = _load_as_ras(t1_file)
+        t1_data, *_ = _load_as_ras(t1_file)
         if t1_data.shape != seg_data.shape:
             raise ValueError("T1 shape ≠ seg shape")
     else:
@@ -249,6 +242,13 @@ def visualize_slant(
             ax.imshow(
                 seg_slc, cmap=cmap, norm=norm, interpolation="nearest", alpha=alpha_seg
             )
+            if col_idx == 0:
+                aspect = seg_sz / seg_sy
+            elif col_idx == 1:
+                aspect = seg_sz / seg_sx
+            else:
+                aspect = seg_sy / seg_sx
+            ax.set_aspect(aspect)
             ax.set_title(title, fontsize=9)
             ax.axis("off")
 
@@ -257,7 +257,6 @@ def visualize_slant(
         fig.savefig(save_path, dpi=300, bbox_inches="tight")
     if show_img:
         plt.show()
-    plt.close(fig)
     return _fig_to_array(fig)
 
 
@@ -307,7 +306,7 @@ def visualize_t1w(
     if not t1_file.exists():
         raise FileNotFoundError(t1_file)
 
-    data_ras = _load_as_ras(t1_file)
+    data_ras, sx, sy, sz, _ = _load_as_ras(t1_file)
 
     x_idxs = _normalize_slices(sagittal_slices, data_ras.shape[0])
     y_idxs = _normalize_slices(coronal_slices, data_ras.shape[1])
@@ -333,6 +332,13 @@ def visualize_t1w(
         for col_idx, (slc, title) in enumerate(zip(slices, titles)):
             ax = axes[row_idx, col_idx]
             ax.imshow(slc, cmap="gray", vmin=vmin, vmax=vmax, interpolation="nearest")
+            if col_idx == 0:
+                aspect = sz / sy
+            elif col_idx == 1:
+                aspect = sz / sx
+            else:
+                aspect = sy / sx
+            ax.set_aspect(aspect)
             ax.set_title(title, fontsize=9)
             ax.axis("off")
 
@@ -341,7 +347,6 @@ def visualize_t1w(
         fig.savefig(save_path, dpi=300, bbox_inches="tight")
     if show_img:
         plt.show()
-    plt.close(fig)
     return _fig_to_array(fig)
 
 
@@ -380,10 +385,7 @@ def visualize_ct(
     if not ct_file.exists():
         raise FileNotFoundError(f"CT file not found: {ct_file}")
 
-    img = nib.load(ct_file)
-    img = nib.as_closest_canonical(img)
-    data_ras = _load_as_ras(ct_file)
-    sx, sy, sz = img.header.get_zooms()[:3]
+    data_ras, sx, sy, sz, _ = _load_as_ras(ct_file)
 
     x_idxs = _normalize_slices(sagittal_slices, data_ras.shape[0])
     y_idxs = _normalize_slices(coronal_slices, data_ras.shape[1])
@@ -423,9 +425,7 @@ def visualize_ct(
         fig.savefig(save_path, dpi=300, bbox_inches="tight")
     if show_img:
         plt.show()
-    else:
-        plt.close(fig)
-    return fig
+    return _fig_to_array(fig)
 
 
 def plot_distribution(
