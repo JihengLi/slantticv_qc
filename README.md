@@ -48,14 +48,14 @@ pip install nibabel numpy pandas scipy tqdm matplotlib
 slant_root and out_dir are **required** inputs. Other options are optional and have defaults.
 
 ```
-python slant‑ticv_qc.py \
-  --slant_root /path/to/Dataset/derivatives \
-  --out_dir    /path/to/output \
+python slant-ticv_qc.py \
+  --slant-root /path/to/Dataset/derivatives \
+  --out-dir    /path/to/output \
   [--label_index labels/label_index.csv] \
   [--cell-thr 3.0] [--sub-thr 5] [--roi-frac-thr 0.05] [--max-roi-show 12]
 ```
 
-- `--slant_root`: **required.** Path to the derivatives/ folder of a BIDS‑style dataset containing SLANT‑TICV outputs:
+- `--slant-root`: **required.** Path to the derivatives/ folder of a BIDS‑style dataset containing SLANT‑TICV outputs:
   ```
   Dataset/
     sub-<label>/
@@ -66,9 +66,9 @@ python slant‑ticv_qc.py \
         [ses-<label>]/
           SLANT-TICVv1.2…/…_T1w_seg.nii.gz
   ```
-- `--out_dir`: **required.** Directory where all CSVs, reports, and figures will be written.
+- `--out-dir`: **required.** Directory where all CSVs, reports, and figures will be written.
 
-- `--label_index`: Path to ROI label CSV (must contain column IDX; default: labels/label_index.csv).
+- `--label-index`: Path to ROI label CSV (must contain column IDX; default: labels/label_index.csv).
 
 - `--cell-thr`: Threshold for |z|-score at the cell level (default: 3.0).
 
